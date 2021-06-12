@@ -1,8 +1,10 @@
 # runc
 
-[![Build Status](https://travis-ci.org/opencontainers/runc.svg?branch=master)](https://travis-ci.org/opencontainers/runc)
 [![Go Report Card](https://goreportcard.com/badge/github.com/opencontainers/runc)](https://goreportcard.com/report/github.com/opencontainers/runc)
 [![GoDoc](https://godoc.org/github.com/opencontainers/runc?status.svg)](https://godoc.org/github.com/opencontainers/runc)
+[![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/588/badge)](https://bestpractices.coreinfrastructure.org/projects/588)
+[![gha/validate](https://github.com/opencontainers/runc/workflows/validate/badge.svg)](https://github.com/opencontainers/runc/actions?query=workflow%3Avalidate)
+[![gha/ci](https://github.com/opencontainers/runc/workflows/ci/badge.svg)](https://github.com/opencontainers/runc/actions?query=workflow%3Aci)
 
 ## Introduction
 
@@ -18,17 +20,18 @@ You can find official releases of `runc` on the [release](https://github.com/ope
 
 ## Security
 
-Reporting process and disclosure communications are outlined in [/org/security](https://github.com/opencontainers/org/blob/master/security/)
+The reporting process and disclosure communications are outlined [here](https://github.com/opencontainers/org/blob/master/SECURITY.md).
+
+### Security Audit
+A third party security audit was performed by Cure53, you can see the full report [here](https://github.com/opencontainers/runc/blob/master/docs/Security-Audit.pdf).
 
 ## Building
 
 `runc` currently supports the Linux platform with various architecture support.
-It must be built with Go version 1.6 or higher in order for some features to function properly.
+It must be built with Go version 1.13 or higher.
 
 In order to enable seccomp support you will need to install `libseccomp` on your platform.
 > e.g. `libseccomp-devel` for CentOS, or `libseccomp-dev` for Ubuntu
-
-Otherwise, if you do not want to build `runc` with seccomp support you can add `BUILDTAGS=""` when running make.
 
 ```bash
 # create a 'github.com/opencontainers' in your GOPATH/src
@@ -54,21 +57,24 @@ sudo make install
 
 #### Build Tags
 
-`runc` supports optional build tags for compiling support of various features.
-To add build tags to the make option the `BUILDTAGS` variable must be set.
+`runc` supports optional build tags for compiling support of various features,
+with some of them enabled by default (see `BUILDTAGS` in top-level `Makefile`).
+
+To change build tags from the default, set the `BUILDTAGS` variable for make,
+e.g. to disable seccomp:
 
 ```bash
-make BUILDTAGS='seccomp apparmor'
+make BUILDTAGS=""
 ```
 
-| Build Tag | Feature                            | Dependency  |
-|-----------|------------------------------------|-------------|
-| seccomp   | Syscall filtering                  | libseccomp  |
-| selinux   | selinux process and mount labeling | <none>      |
-| apparmor  | apparmor profile support           | <none>      |
-| ambient   | ambient capability support         | kernel 4.3  |
-| nokmem    | disable kernel memory account      | <none>      |
+| Build Tag | Feature                            | Enabled by default | Dependency |
+|-----------|------------------------------------|--------------------|------------|
+| seccomp   | Syscall filtering                  | yes                | libseccomp |
 
+The following build tags were used earlier, but are now obsoleted:
+ - **nokmem** (since runc v1.0.0-rc94 kernel memory settings are ignored)
+ - **apparmor** (since runc v1.0.0-rc93 the feature is always enabled)
+ - **selinux**  (since runc v1.0.0-rc93 the feature is always enabled)
 
 ### Running the test suite
 
@@ -93,19 +99,40 @@ You can run a specific integration test by setting the `TESTPATH` variable.
 # make test TESTPATH="/checkpoint.bats"
 ```
 
-You can run a test in your proxy environment by setting `DOCKER_BUILD_PROXY` and `DOCKER_RUN_PROXY` variables.
+You can run a specific rootless integration test by setting the `ROOTLESS_TESTPATH` variable.
 
 ```bash
-# make test DOCKER_BUILD_PROXY="--build-arg HTTP_PROXY=http://yourproxy/" DOCKER_RUN_PROXY="-e HTTP_PROXY=http://yourproxy/"
+# make test ROOTLESS_TESTPATH="/checkpoint.bats"
+```
+
+You can run a test using your container engine's flags by setting `CONTAINER_ENGINE_BUILD_FLAGS` and `CONTAINER_ENGINE_RUN_FLAGS` variables.
+
+```bash
+# make test CONTAINER_ENGINE_BUILD_FLAGS="--build-arg http_proxy=http://yourproxy/" CONTAINER_ENGINE_RUN_FLAGS="-e http_proxy=http://yourproxy/"
 ```
 
 ### Dependencies Management
 
-`runc` uses [vndr](https://github.com/LK4D4/vndr) for dependencies management.
-Please refer to [vndr](https://github.com/LK4D4/vndr) for how to add or update
-new dependencies.
+`runc` uses [Go Modules](https://github.com/golang/go/wiki/Modules) for dependencies management.
+Please refer to [Go Modules](https://github.com/golang/go/wiki/Modules) for how to add or update
+new dependencies. When updating dependencies, be sure that you are running Go `1.14` or newer.
+
+```
+# Update vendored dependencies
+make vendor
+# Verify all dependencies
+make verify-dependencies
+```
 
 ## Using runc
+
+Please note that runc is a low level tool not designed with an end user
+in mind. It is mostly employed by other higher level container software.
+
+Therefore, unless there is some specific use case that prevents the use
+of tools like Docker or Podman, it is not recommended to use runc directly.
+
+If you still want to use runc, here's how.
 
 ### Creating an OCI Bundle
 
@@ -148,7 +175,9 @@ If you used the unmodified `runc spec` template this should give you a `sh` sess
 
 The second way to start a container is using the specs lifecycle operations.
 This gives you more power over how the container is created and managed while it is running.
-This will also launch the container in the background so you will have to edit the `config.json` to remove the `terminal` setting for the simple examples here.
+This will also launch the container in the background so you will have to edit
+the `config.json` to remove the `terminal` setting for the simple examples
+below (see more details about [runc terminal handling](docs/terminals.md)).
 Your process field in the `config.json` should look like this below with `"terminal": false` and `"args": ["sleep", "5"]`.
 
 
@@ -229,7 +258,14 @@ runc delete mycontainerid
 This allows higher level systems to augment the containers creation logic with setup of various settings after the container is created and/or before it is deleted. For example, the container's network stack is commonly set up after `create` but before `start`.
 
 #### Rootless containers
-`runc` has the ability to run containers without root privileges. This is called `rootless`. You need to pass some parameters to `runc` in order to run rootless containers. See below and compare with the previous version. Run the following commands as an ordinary user:
+`runc` has the ability to run containers without root privileges. This is called `rootless`. You need to pass some parameters to `runc` in order to run rootless containers. See below and compare with the previous version.
+
+**Note:** In order to use this feature, "User Namespaces" must be compiled and enabled in your kernel. There are various ways to do this depending on your distribution:
+- Confirm `CONFIG_USER_NS=y` is set in your kernel configuration (normally found in `/proc/config.gz`)
+- Arch/Debian: `echo 1 > /proc/sys/kernel/unprivileged_userns_clone`
+- RHEL/CentOS 7: `echo 28633 > /proc/sys/user/max_user_namespaces`
+
+Run the following commands as an ordinary user:
 ```bash
 # Same as the first example
 mkdir ~/mycontainer
@@ -263,6 +299,13 @@ PIDFile=/run/mycontainerid.pid
 [Install]
 WantedBy=multi-user.target
 ```
+
+## More documentation
+
+* [cgroup v2](./docs/cgroup-v2.md)
+* [Checkpoint and restore](./docs/checkpoint-restore.md)
+* [systemd cgroup driver](./docs/systemd.md)
+* [Terminals and standard IO](./docs/terminals.md)
 
 ## License
 
