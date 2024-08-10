@@ -7,7 +7,7 @@ require github.com/containerd/protobuild v0.1.1-0.20211025221430-7e5ee24bc1f7
 require (
 	github.com/golang/protobuf v1.5.0 // indirect
 	github.com/pelletier/go-toml v1.8.1 // indirect
-	google.golang.org/protobuf v1.27.1 // indirect
+	google.golang.org/protobuf v1.33.0 // indirect
 )
 
 // match ../go.mod
