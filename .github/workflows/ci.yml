@@ -11,6 +11,9 @@ env:
   DOCKER_SWARMKIT_USE_CONTAINER: 1
   IMAGE_NAME: moby/swarmkit
 
+permissions:
+  contents: read
+
 jobs:
   build-dev:
     runs-on: ubuntu-22.04

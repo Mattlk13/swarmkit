@@ -15,6 +15,9 @@ on:
 env:
   DOCKER_SWARMKIT_USE_CONTAINER: 1
 
+permissions:
+  contents: read
+
 jobs:
   validate:
     runs-on: ubuntu-22.04
